@@ -1,0 +1,31 @@
+# Only include application source needed for the image
+*
+!Dockerfile
+!backend/
+!backend/**
+!frontend/
+!frontend/**
+
+# Secrets and environment files
+**/.env
+**/.env.*
+
+# Python generated files
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.venv/
+
+# Frontend generated files
+**/node_modules/
+**/dist/
+
+# Backups and local-only data
+backups/
+data/
+sample*
+sample_images/
+**/*.bak
+**/*.backup
+**/*-backup
+**/*.day*-backup

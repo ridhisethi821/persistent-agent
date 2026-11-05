@@ -1,0 +1,273 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "13958704878416522973"
+    }
+  },
+  "parameters": {
+    "containerImage": {
+      "type": "string",
+      "metadata": {
+        "description": "Fully qualified container image in Azure Container Registry."
+      }
+    },
+    "sandboxEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure Container Apps Sandbox endpoint."
+      }
+    },
+    "sandboxGroups": {
+      "type": "string",
+      "metadata": {
+        "description": "Comma-separated Sandbox Group mappings: group-name:resource-group."
+      }
+    },
+    "anthropicSecretUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Versionless Key Vault secret URI for ANTHROPIC_API_KEY."
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing storage account name."
+      }
+    },
+    "registryName": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing Azure Container Registry name."
+      }
+    },
+    "apiIdentityName": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing API managed identity name."
+      }
+    },
+    "containerAppsEnvironmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing Container Apps environment name."
+      }
+    },
+    "workspaceContainerName": {
+      "type": "string",
+      "defaultValue": "workspaces",
+      "metadata": {
+        "description": "Existing workspace Blob container name."
+      }
+    },
+    "transcriptContainerName": {
+      "type": "string",
+      "defaultValue": "claude-transcripts",
+      "metadata": {
+        "description": "Existing transcript Blob container name."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(subscription().id, resourceGroup().id)]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[format('pa-api-{0}', variables('suffix'))]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('apiIdentityName')))]": {}
+        }
+      },
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), '2023-07-01').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('apiIdentityName'))]"
+            }
+          ],
+          "secrets": [
+            {
+              "name": "anthropic-api-key",
+              "keyVaultUrl": "[parameters('anthropicSecretUri')]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('apiIdentityName'))]"
+            }
+          ],
+          "ingress": {
+            "external": true,
+            "targetPort": 8000,
+            "transport": "auto",
+            "allowInsecure": false
+          }
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "persistent-agent-api",
+              "image": "[parameters('containerImage')]",
+              "resources": {
+                "cpu": 1,
+                "memory": "2Gi"
+              },
+              "probes": [
+                {
+                  "type": "Startup",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 10,
+                  "failureThreshold": 18
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "periodSeconds": 10,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "periodSeconds": 30,
+                  "failureThreshold": 3
+                }
+              ],
+              "env": [
+                {
+                  "name": "ANTHROPIC_API_KEY",
+                  "secretRef": "anthropic-api-key"
+                },
+                {
+                  "name": "WORKSPACE_STORAGE_BACKEND",
+                  "value": "azure_blob"
+                },
+                {
+                  "name": "AZURE_STORAGE_ACCOUNT_URL",
+                  "value": "[concat('https', '://', parameters('storageAccountName'), '.blob.', environment().suffixes.storage)]"
+                },
+                {
+                  "name": "AZURE_STORAGE_CONTAINER",
+                  "value": "[parameters('workspaceContainerName')]"
+                },
+                {
+                  "name": "SESSION_STORE_BACKEND",
+                  "value": "azure_tables"
+                },
+                {
+                  "name": "AZURE_TABLES_ENDPOINT",
+                  "value": "[concat('https', '://', parameters('storageAccountName'), '.table.', environment().suffixes.storage)]"
+                },
+                {
+                  "name": "CLAUDE_TRANSCRIPT_STORE_BACKEND",
+                  "value": "azure_blob"
+                },
+                {
+                  "name": "CLAUDE_TRANSCRIPT_CONTAINER",
+                  "value": "[parameters('transcriptContainerName')]"
+                },
+                {
+                  "name": "EXECUTION_PROVIDER",
+                  "value": "azure_sandbox"
+                },
+                {
+                  "name": "AZURE_SUBSCRIPTION_ID",
+                  "value": "[subscription().subscriptionId]"
+                },
+                {
+                  "name": "AZURE_CLIENT_ID",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('apiIdentityName')), '2023-01-31').clientId]"
+                },
+                {
+                  "name": "AZURE_SANDBOX_GROUPS",
+                  "value": "[parameters('sandboxGroups')]"
+                },
+                {
+                  "name": "AZURE_SANDBOX_ENDPOINT",
+                  "value": "[parameters('sandboxEndpoint')]"
+                },
+                {
+                  "name": "AZURE_SANDBOX_RESOURCE_GROUP",
+                  "value": "slot-d-rg1"
+                },
+                {
+                  "name": "AZURE_SANDBOX_DISK_ID",
+                  "value": "71610387-0f84-475a-853c-228380078702"
+                },
+                {
+                  "name": "AZURE_SANDBOX_CPU",
+                  "value": "3000m"
+                },
+                {
+                  "name": "AZURE_SANDBOX_MEMORY",
+                  "value": "6144Mi"
+                },
+                {
+                  "name": "AZURE_SANDBOX_AUTO_SUSPEND_SECONDS",
+                  "value": "300"
+                },
+                {
+                  "name": "SESSION_MAX_CONCURRENT",
+                  "value": "50"
+                },
+                {
+                  "name": "SESSION_MEMORY_MB",
+                  "value": "6144"
+                },
+                {
+                  "name": "SESSION_MAX_MEMORY_MB",
+                  "value": "6144"
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 10,
+            "rules": [
+              {
+                "name": "http-concurrency",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "20"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "apiContainerAppName": {
+      "type": "string",
+      "value": "[format('pa-api-{0}', variables('suffix'))]"
+    },
+    "apiContainerAppUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', format('pa-api-{0}', variables('suffix'))), '2024-03-01').configuration.ingress.fqdn]"
+    }
+  }
+}

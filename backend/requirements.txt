@@ -1,0 +1,14 @@
+fastapi==0.162.0
+uvicorn==0.54.0
+claude-agent-sdk==0.2.177
+pydantic==2.14.2
+python-multipart==0.0.33
+python-dotenv==1.2.4
+azure-identity==1.27.0
+azure-storage-blob==12.31.1
+pandas==3.1.0
+openpyxl==3.1.5
+python-docx==1.2.0
+docker>=7.1,<8
+azure-data-tables==12.7.0
+azure-containerapps-sandbox==0.1.0b4

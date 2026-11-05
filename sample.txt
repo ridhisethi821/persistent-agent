@@ -1,0 +1,3 @@
+Project: Persistent Agent
+Target concurrency: 50 sessions
+Storage: Persistent workspace files
